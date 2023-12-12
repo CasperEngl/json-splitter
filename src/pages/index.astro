@@ -1,16 +1,136 @@
 ---
+import fs from "node:fs";
+import path from "node:path";
 
+const json = import.meta.env.DEV
+  ? fs.readFileSync(
+      path.join(new URL(import.meta.url).pathname, "../../en.json"),
+      "utf8",
+    )
+  : "";
 ---
 
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>JSON Splitter</title>
+  </head>
+  <body>
+    <div class="m-8">
+      <h1 class="text-3xl">JSON Splitter</h1>
+
+      <form
+        class="mb-4 mt-10 flex flex-col gap-4 rounded border border-gray-200 bg-white px-8 pb-8 pt-6"
+        action="/split-to-zip"
+        method="POST"
+      >
+        <div class="flex flex-col gap-1">
+          <label for="filename">Filename (optional)</label>
+          <input
+            type="text"
+            id="filename"
+            name="filename"
+            placeholder="Filename"
+            class="w-full appearance-none rounded border border-gray-200 px-3 py-2 leading-tight text-gray-700 hover:border-gray-500"
+          />
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label for="json">JSON</label>
+
+          <textarea
+            id="json"
+            name="json"
+            class="w-full appearance-none rounded border border-gray-200 px-3 py-2 leading-tight text-gray-700 hover:border-gray-500"
+            rows="10"
+            placeholder="Paste JSON here"
+            required>{json}</textarea
+          >
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label for="contextSize">Context size</label>
+
+          <div class="relative inline-block w-64">
+            <select
+              id="contextSize"
+              name="contextSize"
+              class="block w-full appearance-none rounded border border-gray-200 bg-white px-4 py-2 pr-8 leading-tight hover:border-gray-500"
+              required
+            >
+              <!-- <option disabled selected>Choose context size</option> -->
+              <option value="4096">4k</option>
+              <option value="8192">8k</option>
+              <option value="16384">16k</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          class="rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-700"
+        >
+          Split
+        </button>
+      </form>
+    </div>
+
+    <script>
+      import exportFile from "../export-file";
+
+      function split() {
+        // Get JSON from textarea
+        const jsonEl = document.querySelector<HTMLTextAreaElement>("#json")!;
+        let jsonStr = jsonEl.value;
+
+        // Parse JSON string into object
+        let jsonObj = JSON.parse(jsonStr);
+
+        // Get selected context size
+        const contextSizeEl =
+          document.querySelector<HTMLSelectElement>("#contextSize")!;
+        let contextSize = parseInt(contextSizeEl.value, 10);
+
+        let tokenCount = 0;
+        let chunk = {} as any;
+        let chunks = [];
+
+        for (let key in jsonObj) {
+          let itemTokenCount = key.length + jsonObj[key].length;
+
+          if (tokenCount + itemTokenCount > contextSize) {
+            chunks.push(chunk);
+            chunk = {};
+            tokenCount = 0;
+          }
+          chunk[key] = jsonObj[key];
+          tokenCount += itemTokenCount;
+        }
+
+        if (Object.keys(chunk).length > 0) {
+          chunks.push(chunk);
+        }
+
+        console.log(chunks);
+
+        // Export each chunk
+        chunks.forEach((chunk, index) => {
+          exportFile({
+            title: `chunk-${index}`,
+            content: JSON.stringify(chunk, null, 2),
+          });
+        });
+      }
+
+      document
+        .querySelector<HTMLFormElement>("#form")
+        ?.addEventListener("submit", (event) => {
+          event.preventDefault();
+          split();
+        });
+    </script>
+  </body>
 </html>
